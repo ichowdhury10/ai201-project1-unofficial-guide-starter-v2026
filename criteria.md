@@ -69,10 +69,12 @@ in at least 4 of 5 tries.
        - "No chunk is shorter than 200 characters, since anything below that
           in my corpus turned out to be a heading with no content under it." -->
 
+Out of the five samplechinks recorded in my README, 4 out of 5 must inlvude their threwad title and at least one complete reply
+
 
 
 **Why this target:**
-
+some replies are cut off and only make sense when paired with the threads question
 
 
 ---
@@ -87,11 +89,13 @@ in at least 4 of 5 tries.
      present — anything, as long as it names a number or an observable
      outcome. -->
 
+For at least 4 of my 5 test questions, the system must produce an answer in which every factual claim is supported by the source document cited for that claim. A refusal counts as a failure for this criterion because these five questions are answerable from my corpus.
+
 
 
 **Why this target:**
 
-
+I want to check that answers preserve the meaning of the sources instead of adding unsupported details. Requiring 4 of 5 allows one imperfect answer while demanding supported answers for most questions.
 
 ---
 
