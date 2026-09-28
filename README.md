@@ -1,6 +1,6 @@
 # The Unofficial Guide
 
-<!-- Replace this line with your name and which corpus you picked. -->
+Injam Chowdhury — `advice_threads` corpus.
 
 > **This file is your submission.** Fill it in as you go — most sections get
 > written during the milestone that produces them, not at the end.
@@ -21,118 +21,154 @@
 
 ## What This Does
 
-<!-- Three or four sentences. Which corpus you picked, and the kinds of
-     questions your system answers. Write it for someone who has never seen
-     this repo.
-
-     Milestone 5. -->
+This is a retrieval-augmented Q&A system over `advice_threads`, 23 anonymous
+student advice threads on things like laundry timing, parking permits,
+laptop specs, and late-work policy — each one a question followed by three
+to five replies that often disagree with each other. Ask it something the
+threads cover ("how much RAM do I need for CS courses?") and it retrieves
+the reply that answers it, checks the match is close enough to trust, and
+has Gemini write a short answer naming the thread file it came from. Ask it
+something the corpus doesn't cover (oil changes, World Cup trivia) and the
+relevance gate refuses instead of guessing.
 
 ## Chunking Strategy
 
-**Chunk size:**
-**Overlap:**
+**Chunk size:** one reply per chunk (not a character count) — 132 to 281
+characters in practice, ~202 on average.
+**Overlap:** none.
 
-<!-- What about YOUR documents made you pick these numbers? Short posts and
-     long sectioned guides don't want the same chunking, and "800 seemed
-     reasonable" earns nothing. Point at something you noticed when you read
-     the documents in Milestone 1.
+Every document here is one thread: a `THREAD:` title line, then three to five
+`--- reply N (votes) ---` blocks that often disagree with each other. Reading
+these in Milestone 1, two things stood out. First, a single reply is
+frequently one short sentence that means nothing on its own — "16 is the
+answer," "Both true.," "Doesn't roll over between semesters" — and only makes
+sense paired with the question it's answering. Second, `fallback_split`'s
+800-character window is bigger than almost every thread (23 documents
+average 543 characters), so it was mostly turning each *whole thread* into
+one chunk — merging three to five disagreeing replies into a single chunk
+and asking retrieval to treat them as one idea.
 
-     If you changed your mind partway through, say so and say why. That's worth
-     more than pretending you got it right first time.
-
-     Milestone 3. -->
+`split_documents` now cuts on the reply boundary instead of a character
+count: each chunk is the thread title plus exactly one reply. Repeating the
+title into every chunk fixes the first problem (a reply chunk still reads as
+a complete thought), and one-reply-per-chunk fixes the second (retrieval
+returns a specific claim instead of a whole disputed thread). No overlap,
+because replies don't share any text with each other — overlapping would
+only duplicate a reply's own sentences into its neighbor. This raised the
+chunk count from 26 (fallback) to 75.
 
 ## Sample Chunks
 
-<!-- Five chunks, pasted as text. Label each one and name the file it came from
-     AND the function that produced it — the grader checks your code against
-     what you claim here.
+**Chunk 1** — source: `thread_bike_commute.txt#0` — produced by: `chunker.py::split_documents`
 
-     `python app.py chunks -n 5` prints all three for you. Copy them straight
-     across.
-
-     Milestone 3. -->
-
-**Chunk 1** — source: `` — produced by: ``
-
-======================================================================
-Chunk 1  |  source: thread_bike_commute.txt#0  |  produced by: chunker.py::fallback_split
-======================================================================
+```
 THREAD: Is a bike worth it for a 20 minute walk commute?
 
 --- reply 1 (14 votes) ---
 Yeah. Cuts an 18 minute walk to about 6. The thing nobody mentions is storage — covered bike parking exists at three buildings and is full by 9am at all three.
-
---- reply 2 (9 votes) ---
-Counterpoint, I sold mine. Between November and March the paths are either icy or salted and salt destroys a drivetrain in one season.
-
---- reply 3 (22 votes) ---
-Both true. I keep a cheap bike for September to November and walk the rest of the year. Total cost was about $120 for the bike and I don't care what happens to it.
-
---- reply 4 (5 votes) ---
-If you do get one, the campus does free registration and it's the only reason I got mine back after it was taken.
-
-**Chunk 2** — source: `` — produced by: ``
-
-```
 ```
 
-**Chunk 3** — source: `` — produced by: ``
+**Chunk 2** — source: `thread_first_gen.txt#1` — produced by: `chunker.py::split_documents`
 
 ```
+THREAD: Anything specific for first-generation students?
+
+--- reply 2 (41 votes) ---
+The thing I'd say: the unwritten rules are the hard part, not the coursework. Ask about the unwritten rules explicitly. People are happy to explain them and nobody volunteers them.
 ```
 
-**Chunk 4** — source: `` — produced by: ``
+**Chunk 3** — source: `thread_laptop_specs.txt#2` — produced by: `chunker.py::split_documents`
 
 ```
+THREAD: How much laptop do I actually need for CS courses?
+
+--- reply 3 (12 votes) ---
+I did two years on an 8GB machine and it was fine until the last project, at which point it very much wasn't. 16 is the answer.
 ```
 
-**Chunk 5** — source: `` — produced by: ``
+**Chunk 4** — source: `thread_parking.txt#1` — produced by: `chunker.py::split_documents`
 
 ```
+THREAD: Worth getting a parking permit?
+
+--- reply 2 (21 votes) ---
+Street parking on Verrill is legal and free and unmarked, which is why half the upper years do it.
 ```
+
+**Chunk 5** — source: `thread_sleep_schedule.txt#1` — produced by: `chunker.py::split_documents`
+
+```
+THREAD: Everyone says fix your sleep. Does it actually matter?
+
+--- reply 2 (37 votes) ---
+The library being open until 2am is a trap. It's a resource, not a schedule.
+```
+
+Reading these back: all five read as one complete thought — a question plus
+one full reply, no sentence cut in half at either end — which is what
+criterion 4 checks for.
 
 ## Sample Answer
 
-<!-- One complete question and answer, pasted as text, with the source line
-     visible. Milestone 4. -->
-
-**Question:**
+**Question:** How much RAM do students recommend for CS courses?
 
 **Answer:**
 
 ```
+Students recommend 16GB of RAM for CS courses, noting that while an 8GB
+machine can work initially, it falls short on later projects.
+
+Source: thread_laptop_specs.txt
+
+Sources retrieved: thread_laptop_specs.txt, thread_pass_fail.txt
 ```
+
+(best distance 0.199, cutoff 0.65 — via `python app.py ask "How much RAM do
+students recommend for CS courses?"`)
 
 **My relevance cutoff:**
 
-<!-- The number you set in config.py, and how you got there.
-
-     You ran five questions your corpus covers and the five in OUT_OF_SCOPE
-     that it clearly doesn't, and wrote down the best distance for each. What
-     did those two groups look like? Where was the gap? Put the actual numbers
-     here — the table below wants all ten rows.
-
-     Milestone 4. -->
+I set `THRESHOLD = 0.65` in `config.py`. I ran my five test questions and the
+five in `OUT_OF_SCOPE` through `python app.py retrieve` and recorded the best
+distance for each. In-scope questions came back between 0.199 and 0.567;
+out-of-scope came back between 0.807 and 0.896 — a clean gap with nothing
+from either group inside it. I put 0.65 near the in-scope end of that gap
+rather than in the middle, so a borderline-relevant question is more likely
+to get an answer than a refusal, while still leaving 0.157 of headroom below
+the closest out-of-scope distance I saw.
 
 | Question | In corpus? | Best distance |
 |---|---|---|
-|  |  |  |
+| When do applications open for summer internships? | Yes | 0.204 |
+| Which campus has parking passes available? | Yes | 0.536 |
+| Which mornings do students recommend for finding available laundry machines? | Yes | 0.394 |
+| How much RAM do students recommend for CS courses? | Yes | 0.199 |
+| Which office handles documented illness affecting assignment deadlines? | Yes | 0.567 |
+| What is the capital of Mongolia? | No | 0.893 |
+| How do I change the oil in a diesel engine? | No | 0.896 |
+| Who won the 1994 World Cup? | No | 0.893 |
+| What is the recommended dosage of ibuprofen for a headache? | No | 0.807 |
+| How do I write a for loop in Rust? | No | 0.835 |
 
 ## How I Used AI
 
-<!-- Two specific moments. For each: what you asked for, what came back, and
-     what you changed about it.
+**1.** I asked Claude to write Milestone 3's `split_documents` from what I'd
+noticed reading the threads: that `fallback_split`'s 800-character window
+was bigger than almost every whole thread, so it was merging three to five
+disagreeing replies into one chunk, and that a single reply often means
+nothing without the question above it. It came back with a version that
+splits on the `--- reply N ---` markers and repeats the `THREAD:` line into
+every chunk, with a fallback to the old chunker for any document that isn't
+in that shape. I checked the output of `python app.py chunks -n 5` myself to
+confirm none of the five samples cut a reply in half before trusting it.
 
-     "I asked Claude to write the chunking function from my notes. It ignored
-     the overlap, so I added that myself" is the level of detail we're after.
-     "I used AI to help me code" is not.
-
-     Milestone 5. -->
-
-**1.**
-
-**2.**
+**2.** I asked Claude to actually run retrieval for my five test questions
+and the five `OUT_OF_SCOPE` ones and report the best distance for each,
+rather than have me copy numbers out of the terminal by hand for the
+threshold table. It came back with the two groups (0.199–0.567 in-scope,
+0.807–0.896 out-of-scope) and a suggested cutoff at 0.65; I picked where in
+that gap to put it myself — close to the in-scope side rather than the
+midpoint — and wrote the reasoning in `criteria.md` in my own words.
 
 <!-- ── Stretch features ─────────────────────────────────────────────────────
      Doing one? Say so here BEFORE you start. A feature this README never

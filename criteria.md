@@ -23,8 +23,15 @@ For at least 4 of my 5 test questions, the retrieved chunks include one that
 contains the answer.
 
 **Why this target:**
-<!-- e.g. "One of my questions is about a topic only two documents mention, so
-     I expect that one to be hard." -->
+
+My "parking passes" question is the one I expect to miss sometimes. The
+answer ("west campus") isn't stated once — it's spread across three replies
+in `thread_parking.txt` that partly disagree with each other, and when I ran
+retrieval on it the best distance (0.536) was the worst of my five in-scope
+questions, right up against the others in the ranking. Four of five leaves
+room for that one to come back without the deciding reply while still
+holding the other four, which are each answered in a single reply, to a
+higher bar.
 
 ---
 
@@ -33,8 +40,15 @@ contains the answer.
 Every answer the system produces names at least one source document.
 
 **Why this target:**
-<!-- Why all five and not four? What about your setup makes that achievable —
-     or what would have to go wrong for it not to be? -->
+
+This one isn't down to the model remembering to behave — it's built into the
+code path. `generate.py::build_prompt` labels every chunk in the prompt with
+`[from <filename>]`, and `app.py::ask_pipeline` sets `outcome["sources"]` from
+the retrieved chunks' own filenames, not from parsing the model's text. As
+long as a question passes the gate at all, there are retrieved chunks with
+real filenames attached, so a source is always available to report. All five
+and not four, because the only way this fails is the gate passing on zero
+results, which `gate.check` already treats as a refusal.
 
 ---
 
@@ -50,8 +64,17 @@ in at least 4 of 5 tries.
      just keep five of them, or the "4 of 5" above has nothing to be 4 of. -->
 
 **Why this target:**
-<!-- What did your distances look like when you set the cutoff in Milestone 4?
-     Was there a clean gap, or did the two groups overlap? -->
+
+I ran my five in-scope questions and the five `OUT_OF_SCOPE` ones through
+`python app.py retrieve` and recorded the best distance for each. In-scope
+came back 0.199–0.567; out-of-scope came back 0.807–0.896. That's a clean
+gap with nothing from either group inside it, so I didn't need to split the
+difference — I put the cutoff at 0.65, close to the in-scope side rather
+than the middle (0.687) of the gap. I picked the low end on purpose: a
+question that's borderline-relevant should still get an answer instead of a
+refusal, and the closest out-of-scope distance I saw (0.807) still leaves
+0.157 of headroom above 0.65, so I'm not trading away real protection against
+out-of-corpus questions to get that margin.
 
 ---
 

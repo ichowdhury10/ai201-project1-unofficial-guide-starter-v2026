@@ -22,10 +22,13 @@ to it, write down what you saw, and move on. That's a real observation about
 your pipeline, not giving up.
 """
 
+import re
 from dataclasses import dataclass
 
 import config
 from ingest import Document
+
+_REPLY_RE = re.compile(r"(?=^--- reply \d+ .*?---$)", re.MULTILINE)
 
 
 @dataclass
@@ -82,22 +85,45 @@ def fallback_split(
 
 def split_documents(documents: list[Document]) -> list[Chunk]:
     """
-    Split documents into chunks. ⚠️ REPLACE THE BODY OF THIS IN MILESTONE 3.
+    Split each thread into one chunk per reply, with the thread title
+    repeated at the top of every chunk.
 
-    Right now it just calls the fallback. That is the plain, generic behaviour
-    the brief is talking about.
+    `advice_threads` is a "THREAD: <title>" line followed by several
+    "--- reply N (votes) ---" blocks. A reply is the unit of useful
+    information here — voters up or down a single answer, not the thread as a
+    whole — but a reply read on its own is often unintelligible: replies like
+    "16 is the answer" or "Both true." only make sense next to the question
+    they're answering. Repeating the title into every chunk keeps that
+    context without merging unrelated replies together the way a fixed
+    character window does.
 
-    When you write your own strategy, set `produced_by` to
-    "chunker.py::split_documents" so your README's Sample Chunks section names
-    the right function. `app.py chunks` prints that string for you.
-
-    Things worth thinking about before you write any code:
-      - Are your documents short posts or long guides?
-      - Is the useful information in one sentence, or spread over a paragraph?
-      - Would splitting on paragraph breaks keep more thoughts intact than
-        splitting on a character count?
+    Falls back to `fallback_split` for any document that isn't in this
+    "THREAD: ... / --- reply ... ---" shape, so this still behaves on other
+    corpora.
     """
-    return fallback_split(documents)
+    chunks: list[Chunk] = []
+    for doc in documents:
+        lines = doc.text.split("\n", 1)
+        title_line = lines[0].strip()
+        rest = lines[1] if len(lines) > 1 else ""
+
+        if not title_line.startswith("THREAD:") or "--- reply" not in rest:
+            chunks.extend(fallback_split([doc]))
+            continue
+
+        replies = [piece.strip() for piece in _REPLY_RE.split(rest) if piece.strip()]
+        for index, reply in enumerate(replies):
+            text = f"{title_line}\n\n{reply}"
+            chunks.append(
+                Chunk(
+                    text=text,
+                    source=doc.source,
+                    index=index,
+                    produced_by="chunker.py::split_documents",
+                )
+            )
+
+    return chunks
 
 
 def describe(chunks: list[Chunk]) -> str:
