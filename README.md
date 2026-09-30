@@ -170,6 +170,28 @@ threshold table. It came back with the two groups (0.199–0.567 in-scope,
 that gap to put it myself — close to the in-scope side rather than the
 midpoint — and wrote the reasoning in `criteria.md` in my own words.
 
+**3. (Unit 2, Milestone 2)** After my own first pass through all five
+criteria came back all-MET, I had Claude run the exact check Milestone 2
+suggests — two independent reviews, each handed only the real questions,
+retrieved chunks, and generated answers (no view of my own reasoning),
+instructed to argue for the opposite verdict as strongly as possible on my
+two closest calls, then give an honest final recommendation. One review
+argued that my "parking" verdict should flip; the other argued something I
+hadn't considered at all — that my *internships* question also doesn't hold
+up, because it asks when applications "open" while the corpus only ever
+states when they "close" or "hire," and separately that my own `expects`
+field for parking ("West Campus") reads the source sentence backwards
+("West lots sell out... East lot never sells out" is better evidence for
+East). I didn't take either claim on faith — I re-read both source
+documents myself and confirmed both held up on a plain reading. I accepted
+the internships and parking findings for criterion 1 (flipping it from MET
+to MISSED, 3/5), but rejected the same reviewer's attempt to also fail
+criterion 5 over internships, since the model's actual answer there
+truthfully reports what the source says ("close," not "open") — nothing
+false was claimed, so criterion 5 isn't about the same defect. Without this
+check I would have submitted five MET verdicts built partly on my own too-
+generous reading of two questions I'd written myself.
+
 <!-- ── Stretch features ─────────────────────────────────────────────────────
      Doing one? Say so here BEFORE you start. A feature this README never
      claims earns nothing.
@@ -185,46 +207,127 @@ midpoint — and wrote the reasoning in `criteria.md` in my own words.
 
 ## Run Log — Before
 
-<!-- Your five criteria, three runs each. `python run_eval.py --label before`
-     runs the questions, puts the OUT_OF_SCOPE ones through the gate, and
-     writes it all into results/ for you. Targets come from criteria.md; the
-     verdict column is your call.
+Produced by `run_eval.py::main` (retrieval evidence from `store.py::search`
+over chunks from `chunker.py::split_documents`; gate evidence from
+`gate.py::check` via `run_eval.py::check_out_of_scope`). Full file:
+[`results/run_2026-09-29_2206_before.md`](results/run_2026-09-29_2206_before.md).
+Corpus `advice_threads`, top-k 5, cutoff 0.65, 3 runs per question, caching off.
 
-     Criterion 3 is measured in one deterministic pass rather than three, so
-     the same number goes in all three run columns. That's correct, not lazy.
-
-     Milestone 1. -->
+Criteria 1, 3, and 4 don't vary between runs — retrieval and the gate are
+deterministic (same question, same embeddings, same fixed cutoff every time),
+and criterion 4 is a one-time check of the five samples already in this
+README, not something `run_eval.py` re-measures per run. Only criteria 2 and 5
+depend on what the model actually generates, which is why those are the ones
+worth running three times.
 
 | Criterion | Target | Run 1 | Run 2 | Run 3 | Verdict |
 |---|---|---|---|---|---|
-| 1. Retrieved chunk contains the answer | 4 of 5 |  |  |  |  |
-| 2. Every answer names a source | 5 of 5 |  |  |  |  |
-| 3. Gate stops out-of-corpus questions | 4 of 5 |  |  |  |  |
-| 4. | | | | | |
-| 5. | | | | | |
+| 1. Retrieved chunk contains the answer | 4 of 5 | 3/5 | 3/5 | 3/5 | MISSED |
+| 2. Every answer names a source | 5 of 5 | 5/5 | 5/5 | 5/5 | MET |
+| 3. Gate stops out-of-corpus questions | 4 of 5 | 5/5 | 5/5 | 5/5 | MET |
+| 4. Sample chunks read as thread title + one complete reply | 4 of 5 | 5/5 | 5/5 | 5/5 | MET |
+| 5. Every factual claim supported by its cited source | 4 of 5 | 4/5 | 4/5 | 4/5 | MET |
 
-<!-- Underneath, paste the REAL output for each criterion from one of your
-     runs — the actual text your system produced, not a description of it.
-     Name the file and function that produced it. -->
+> Criterion 1 first came back 5/5 in my own initial read. It's 3/5 here
+> because I ran the adversarial check Milestone 2 itself suggests — "argue
+> the opposite verdict as strongly as you can" — before locking these in,
+> and it caught two questions I'd graded too generously. See **Verdicts**
+> below for what changed and why.
+
+**Real output — criterion 1, a clean pass** (retrieval, `store.py::search`,
+top result for "How much RAM do students recommend for CS courses?",
+distance 0.199):
+
+```
+THREAD: How much laptop do I actually need for CS courses?
+
+--- reply 1 (31 votes) ---
+Less than the recommended spec page says. 16GB of RAM is the one number worth paying for; everything else you'll never notice.
+```
+
+**Real output — criterion 1, the two questions that don't actually pass**
+(same retrieval, full source documents):
+
+```
+THREAD: When should I start looking for a summer internship?
+
+--- reply 1 (30 votes) ---
+Earlier than feels reasonable. Large employers close applications in October and November for the following summer.
+```
+
+My question asks *when applications open*; the only date in the corpus is
+when large employers *close* theirs. `expects: "October"` matched the text,
+but not because the corpus answers the question I asked.
+
+```
+THREAD: Worth getting a parking permit?
+
+--- reply 1 (15 votes) ---
+West lots sell out in about three days in August. East lot never sells out but it's a 12 minute walk, at which point you might as well have parked on the street.
+```
+
+My `expects` field says "West Campus." Read plainly, this sentence says the
+opposite: West sells out (i.e. isn't available most of the year) and East
+never does. If "available" means "you can still get one," this chunk is
+better evidence for East than for West.
+
+**Real output — criterion 2** (generation, `generate.py::answer_from_chunks`,
+run 1 of the same question):
+
+```
+Students recommend 16GB of RAM for CS courses, noting that 8GB can become insufficient for later projects.
+
+Source: thread_laptop_specs.txt
+```
+
+**Real output — criterion 3** (`gate.py::check` via
+`run_eval.py::check_out_of_scope`):
+
+```
+refused  (best distance 0.807)  What is the recommended dosage of ibuprofen for a headache?
+```
+
+**Real output — criterion 4** — the five samples already pasted under
+[Sample Chunks](#sample-chunks) above, produced by `chunker.py::split_documents`.
+
+**Real output — criterion 5**, the one question that actually breaks this
+one (`generate.py::answer_from_chunks`, "Which campus has parking passes
+available?", run 1 — repeats in runs 2 and 3 with different wording, same
+claim):
+
+```
+Based on the provided documents, there is no mention of which specific campus has parking passes available.
+
+Source: `thread_parking.txt`
+```
+
+The chunk this was generated from (`store.py::search`, ranked #4 of 5,
+distance 0.586) actually says: *"West lots sell out in about three days in
+August. East lot never sells out but it's a 12 minute walk..."* — there is
+relevant information right there, and (see Diagnoses) it's genuinely
+ambiguous which side it actually supports. Either way, this is a refusal on
+a question I declared answerable in criteria.md, which is what fails
+criterion 5, not a claim of outright fabrication.
 
 ## Verdicts
 
-<!-- MET or MISSED for each of the five, against the target you wrote last
-     unit — not a new one. Plus a sentence on how you decided. That sentence
-     matters most where it was close.
-
-     If your target said 4 of 5 and your runs came out 4, 3, 4, that's a MISS.
-     The target has to hold, not show up occasionally.
-
-     Milestone 2. -->
+My first pass through this table gave all five a MET. Milestone 2's own
+advice is that this is exactly where people get it wrong, so before locking
+anything in I did what it also suggests — asked for the opposite verdict,
+argued as strongly as possible, for my two closest calls (criterion 1 and
+criterion 5). I ran that as two independent reviews with no visibility into
+each other or into my reasoning, each handed the real questions, the real
+retrieved chunks, and the real generated answers, and told to argue for
+MISSED as hard as it could, then give its own honest final call. The
+criterion 1 review changed my mind; the criterion 5 one didn't, and said so.
 
 | # | Criterion | Verdict | How I decided |
 |---|---|---|---|
-| 1 |  |  |  |
-| 2 |  |  |  |
-| 3 |  |  |  |
-| 4 |  |  |  |
-| 5 |  |  |  |
+| 1 | Retrieved chunk contains the answer | **MISSED** | 3/5, not 5/5. This flipped after the adversarial review. On internships, my question asks when applications *open*; the only date the corpus gives is when large employers *close* theirs (Oct/Nov) and when smaller ones *hire* (Feb/March) — `expects: "October"` matched the chunk's text without the chunk actually answering what I asked. On parking, my `expects` field says "West Campus," but the chunk states "West lots sell out in about three days... East lot never sells out" — read plainly, that's evidence for East being the one with availability, not West. Both of these are questions I wrote from memory of the corpus rather than from its actual wording, and a plain reading doesn't let either one count as "the retrieved chunk contains the answer." That leaves laundry, RAM, and dean-of-students — 3 of 5, one short of the target. |
+| 2 | Every answer names a source | MET | 5/5 in all three runs (15/15 total) — every one of the 15 generated answers, read individually, names a real filename, including the three "parking" answers that otherwise fail criterion 5. This one held even where the content was wrong. |
+| 3 | Gate stops out-of-corpus questions | MET | 5/5, deterministic single pass. All five `OUT_OF_SCOPE` questions came back with best distance ≥ 0.807, comfortably over the 0.65 cutoff. |
+| 4 | Sample chunks read as thread title + one complete reply | MET | 5/5 of the samples in this README's Sample Chunks section. I re-read all five against the target after writing the chunker, not just when I first pasted them, since it would have been easy to let a stale sample from the old chunker slip through — I had exactly that stale sample in an earlier draft and replaced it. |
+| 5 | Every factual claim supported by its cited source | MET | 4/5 in every one of 3 runs, same question failing every time. The adversarial review pushed on this one too but didn't change the verdict, and I agree with why not: on internships, the model's answer says the source's applications *close* in Oct/Nov — that's exactly what the source says, so nothing false was claimed, even though my *question* asked about opening. That's a flaw in criterion 1, not this one. Parking is the real failure: given my own criterion's rule that a refusal counts as a failure on these five stipulated-answerable questions, "there is no mention of which campus has parking passes available" is a refusal, regardless of how genuinely ambiguous the underlying source turned out to be. 4/5 meets "at least 4 of 5" — MET — but see Diagnoses for why I don't think that's the end of the story. |
 
 ## Diagnoses
 
