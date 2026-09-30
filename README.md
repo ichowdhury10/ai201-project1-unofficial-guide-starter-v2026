@@ -331,68 +331,189 @@ criterion 1 review changed my mind; the criterion 5 one didn't, and said so.
 
 ## Diagnoses
 
-<!-- For each miss: which stage caused it, and how. The stage alone isn't
-     enough — you need the mechanism.
+### Criterion 1 — MISSED (3/5)
 
-     Not a diagnosis: "Question 3 didn't work."
-     A diagnosis:     "Question 3 asks about laundry costs. The answer is in
-                       one sentence that got split across two chunks, so
-                       neither chunk on its own contains it."
+Two questions fail, and it's the same mechanism both times, not two separate
+ones: **internships** and **parking**.
 
-     The five stages: loading → chunking → embedding → retrieval → generation.
+- **Loading** — not the cause. Both source documents load clean, every
+  reply intact.
+- **Chunking** — my first guess, tested and ruled out. I hypothesized that
+  `split_documents` putting the parking thread's two "west" mentions in
+  separate, non-adjacent chunks (ranks #1 and #4 of 5, two unrelated chunks
+  between them) was why the model couldn't use them. I tested this directly
+  rather than assuming it — see **The Improvement** below — by re-chunking
+  the whole corpus so every reply of a thread sits in one chunk together,
+  and re-running the full test against that index. Both questions failed in
+  exactly the same way, under exactly the same reasoning. Ruled out by
+  measurement.
+- **Embedding / Retrieval** — also not the cause, under both chunkings.
+  Retrieval surfaces the right thread every time (internship timing for the
+  internship question, parking for the parking question) at low distance
+  (0.204–0.586). The relevant sentences are right there in what comes back.
+- **Generation** — not the cause either, and this is the part that
+  surprised me. On internships, the model doesn't hallucinate an opening
+  date — every run correctly says applications *close* in October and
+  November, which is exactly what the source says. On parking, even handed
+  a *single* chunk with every "west" mention merged into one place (the
+  whole-thread variant), the model still says there's no campus named,
+  rather than guessing. In both cases the model is being accurate to what
+  the documents actually contain.
 
-     Look for a pattern. If three misses all ask about numbers, that's one
-     problem, not three.
+The real mechanism sits upstream of all five stages: I wrote these two test
+questions in `questions.py` (Unit 1, Milestone 2) from what I remembered or
+assumed the corpus said, not from its actual wording, and didn't check either
+one against real retrieval before finalizing them. "When do applications
+open" has no answer in a corpus that only states *close* and *hire* dates.
+"Which campus has parking passes available" asks for a noun ("campus") the
+corpus never uses, and my own `expects: "West Campus"` turns out to read the
+one relevant sentence backwards — "West lots sell out in about three days...
+East lot never sells out" more directly supports East as the one with
+availability. No amount of re-chunking, re-embedding, or re-prompting fixes
+a question asking for something the source material doesn't contain, or
+misreads what it does contain.
 
-     Missed nothing? Say so, then say honestly whether your targets were set
-     low, and which one you'd tighten and to what.
+I only caught the parking half of this on my own. I found the internships
+half by running the "argue the opposite verdict" check Milestone 2 itself
+recommends — an independent review, blind to my reasoning, argued for
+MISSED on both questions and I checked its claims against the source text
+myself rather than taking them on faith. It held up on both. That's the
+main lesson of this milestone: my own first pass at these two questions
+looked fine to me on a casual read, and only came apart once something
+independent was actively trying to break it.
 
-     Milestone 3. -->
+### Criterion 5 — a MET I don't fully trust
+
+Criterion 5 stayed at 4/5 (MET) through the same adversarial review — the
+argument that internships' "close" vs. "open" mismatch should count against
+it here too didn't hold up, because the model's claim (*"close in October
+and November"*) really is what the source says; nothing false was asserted.
+But the parking failure is still real, and criterion 5's "4 of 5" was loose
+enough to absorb it without ever surfacing as a MISS.
+
+**Are my targets set low?** For criterion 5, a little — it was written
+before any evidence existed, and happened to be exactly loose enough to hide
+a reproducible failure on the very first real measurement (same question,
+all 3 runs, not noise). If I were tightening one criterion for the next
+unit, it would be this one, to 5 of 5: these are five questions I already
+claimed were answerable from my own corpus, so a single free miss isn't
+headroom for a genuinely hard question, it's headroom for not noticing a
+bug. Per the rule at the top of this file I'm not rewriting criteria.md to
+say that — a target I met stays where it is — but I'm saying so here rather
+than letting the MET verdict stand as the whole story.
 
 ## The Improvement
 
-**What I changed:**
+**What I changed:** Built a second index of the same corpus using
+`chunker.py::fallback_split` — the original whole-thread, 800-character
+chunker — stored under index variant `wholethread`, alongside the default
+`split_documents` index rather than replacing it. Then ran the full test
+again against that variant: `python run_eval.py --label after --variant
+wholethread`. The committed default chunker, config, and all five README
+Sample Chunks are untouched.
 
-**Why I picked it:**
-
-<!-- Connect it to a specific diagnosis above in one sentence. If you can't,
-     you picked a fix because it sounded impressive. -->
+**Why I picked it:** My diagnosis hypothesized that `split_documents` putting
+the parking thread's two relevant replies into separate, non-adjacent chunks
+was why the model couldn't connect them into an answer. Whole-thread
+chunking is the direct test of that hypothesis: it puts both "west" mentions
+back into the same chunk, back to back, exactly as they were before I
+changed the chunker in Unit 1. (I only later confirmed, via the adversarial
+verdict check above, that chunking was never going to be the whole story —
+but I'd already formed and was testing this hypothesis before that check
+ran, so I'm reporting the experiment as I actually ran it.)
 
 ### Run Log — After
 
-<!-- Same format, same five criteria, three runs each.
-     `python run_eval.py --label after` -->
+Produced the same way as Run Log — Before, index variant `wholethread`. Full
+file: [`results/run_2026-09-29_2214_after.md`](results/run_2026-09-29_2214_after.md).
 
 | Criterion | Target | Run 1 | Run 2 | Run 3 | Verdict |
 |---|---|---|---|---|---|
-| 1. Retrieved chunk contains the answer | 4 of 5 |  |  |  |  |
-| 2. Every answer names a source | 5 of 5 |  |  |  |  |
-| 3. Gate stops out-of-corpus questions | 4 of 5 |  |  |  |  |
-| 4. | | | | | |
-| 5. | | | | | |
+| 1. Retrieved chunk contains the answer | 4 of 5 | 3/5 | 3/5 | 3/5 | MISSED |
+| 2. Every answer names a source | 5 of 5 | 5/5 | 5/5 | 5/5 | MET |
+| 3. Gate stops out-of-corpus questions | 4 of 5 | 5/5 | 5/5 | 5/5 | MET |
+| 4. Sample chunks read as thread title + one complete reply | 4 of 5 | 5/5 | 5/5 | 5/5 | MET (unaffected — this variant is a side experiment; the committed chunker and samples didn't change) |
+| 5. Every factual claim supported by its cited source | 4 of 5 | 4/5 | 4/5 | 4/5 | MET |
 
-**Did it help?**
+**Real output — after** (`generate.py::answer_from_chunks`, "Which campus has
+parking passes available?", run 2, whole-thread variant — the retrieved
+chunk this time is the *entire* `thread_parking.txt`, all three replies
+together, not split apart):
 
-<!-- Say plainly whether it did, and how you know. If it made things worse,
-     say that — a change that backfired, honestly reported, earns full credit
-     and is more interesting than one that worked. What matters is that you can
-     tell.
+```
+I don't have enough information to determine which campus has parking passes available, as the documents only mention West lots and East lots selling out in August without naming a specific campus (thread_parking.txt).
+```
 
-     Milestone 4. -->
+**Did it help?** No — and not ambiguously. Every criterion came back at
+exactly the same count as before, question for question, run for run,
+including criterion 1's 3/5 (the internships and parking questions are still
+the two that don't hold up, for the same reasons — no chunking strategy
+changes what a source document does or doesn't say). Distances shifted a
+little (retrieval sees 26 bigger chunks instead of 75 small ones, so the
+numbers move — RAM went from 0.199 to 0.246, for instance), but nothing
+crossed the 0.65 gate either way, and the actual answers barely changed in
+substance. The parking answer, under whole-thread chunking, is now *more*
+explicit that the model saw the west/east lot content and still declined to
+treat it as naming a "campus." That's a clean disproof of my chunking
+hypothesis, not an ambiguous one: the evidence was structurally identical —
+one chunk instead of two — and the model's behavior didn't move at all. The
+real cause (two test questions that don't match what the corpus actually
+says, diagnosed above) is outside what a different chunking strategy can
+fix, and I'd rather report that plainly than dress this up as a win.
 
 ## What's Still Broken
 
-<!-- For each criterion still missed after your fix: what you'd do about it,
-     and why you stopped where you did.
+**Criterion 1 (MISSED, 3/5)** — internships and parking. Both survive the
+improvement unchanged, because the improvement was a pipeline change and
+this isn't a pipeline problem:
 
-     "I ran out of time" is fine if it's true. Pretending nothing is left is
-     not.
+- **What's wrong:** "When do applications open for summer internships?" asks
+  for a date the corpus never states (it gives *close* and *hire* dates
+  instead). "Which campus has parking passes available?" asks for a noun
+  ("campus") the corpus never uses, and my own `expects` field ("West
+  Campus") reads the one relevant sentence backwards relative to a plain
+  reading of "sell out" vs. "never sells out."
+- **What I'd do about it:** not touch the pipeline again — I tested the one
+  pipeline-side hypothesis I had (chunking granularity) and disproved it
+  directly. The actual fix is on the test side: reword each question and its
+  `expects` field to match the corpus's own wording (ask when applications
+  *close*, not *open*; ask which lot is *harder to get a permit for* rather
+  than which "campus" has passes "available," and fix `expects` to "east" or
+  reword to ask for the scarce one, "west"), or add documents that actually
+  support the original framing if I want to keep testing it as originally
+  written.
+- **Why I stopped here:** rewriting `questions.py` now, after seeing both
+  fail, would be indistinguishable from quietly moving the goalposts — the
+  whole point of writing the criteria and questions in Unit 1 before any
+  results existed was so a fix like that has to be visible as a fix, not
+  folded invisibly into "how I always tested it." I'm leaving both broken
+  and named, which is what this milestone asks for instead.
 
-     Milestone 5. -->
+**Criterion 5 (MET, but see Diagnoses)** — the parking question is also this
+criterion's one failure, for a related but distinct reason (a refusal on a
+question I declared answerable, not the wrong retrieval target). Same
+answer: I'd fix the question, not the pipeline, and for the same reason I'm
+not doing it now.
 
 ## What I'd Do Differently
 
-<!-- Knowing what you know now — which of your five criteria would you write
-     differently, and why?
+I'd write criterion 1 and criterion 5 both differently, but for different
+reasons. Criterion 5's "4 of 5" was loose enough that a real, reproducible
+bug never had to surface as a MISS — I'd tighten it to 5 of 5, since these
+are five questions I already claimed were answerable from my own corpus.
+Criterion 1 didn't need a different number; the problem there wasn't the
+target, it was that I graded my own first pass too generously and it took an
+adversarial second opinion to catch two flawed questions a casual read had
+missed — mine, both in Unit 1 when I wrote them and again in Unit 2 when I
+first scored them.
 
-     Milestone 5. -->
+More than either number, I'd change how I *write* the five test questions in
+the first place, not just how I score them after the fact. I wrote both
+flawed questions in Unit 1 from what I remembered or assumed the corpus
+said, not from its actual wording, and never ran `python app.py retrieve` on
+either one until Unit 2 forced me to look. If I'd run that one command
+before locking each question in, I'd have caught "open" vs. "close" and
+"campus" vs. "lot" in Milestone 2 of Unit 1, instead of diagnosing them
+after the fact in Unit 2 — and I'd build the "argue the opposite verdict"
+check into that same step next time, rather than saving it for Milestone 2
+of the *following* unit.
